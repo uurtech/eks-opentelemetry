@@ -1,0 +1,118 @@
+image:
+  repository: fluent/fluentd-kubernetes-daemonset
+  tag: v1.16-debian-cloudwatch-1
+
+env:
+  - name: FLUENT_CLOUDWATCH_LOG_GROUP_NAME
+    value: "/aws/eks/eks-observability-cluster/fluentd"
+  - name: FLUENT_CLOUDWATCH_LOG_STREAM_NAME
+    value: "fluentd"
+  - name: FLUENT_CLOUDWATCH_REGION
+    value: "us-west-2"
+
+serviceAccount:
+  create: true
+  name: fluentd
+  annotations:
+    eks.amazonaws.com/role-arn: # Will be set via command line
+
+resources:
+  limits:
+    cpu: 200m
+    memory: 200Mi
+  requests:
+    cpu: 100m
+    memory: 200Mi
+
+tolerations:
+  - key: node-role.kubernetes.io/master
+    operator: Exists
+    effect: NoSchedule
+
+configMaps:
+  general:
+    containers: |
+      <source>
+        @type tail
+        @id in_tail_container_logs
+        path /var/log/containers/*.log
+        pos_file /var/log/fluentd-containers.log.pos
+        tag "kubernetes.*"
+        exclude_path ["/var/log/containers/cloudwatch-agent*", "/var/log/containers/fluentd*"]
+        read_from_head true
+        <parse>
+          @type "k8s-json"
+          time_format %Y-%m-%dT%H:%M:%S.%NZ
+          time_type string
+        </parse>
+      </source>
+
+      <source>
+        @type tail
+        @id in_tail_cwagent_logs
+        path /var/log/containers/cloudwatch-agent*
+        pos_file /var/log/fluentd-cwagent.log.pos
+        tag "kubernetes.var.log.containers.cloudwatch-agent"
+        read_from_head true
+        <parse>
+          @type "k8s-json"
+          time_format %Y-%m-%dT%H:%M:%S.%NZ
+          time_type string
+        </parse>
+      </source>
+
+      <source>
+        @type tail
+        @id in_tail_startupscript_logs
+        path /var/log/startupscript.log
+        pos_file /var/log/fluentd-startupscript.log.pos
+        tag "startupscript.log"
+        read_from_head true
+        <parse>
+          @type syslog
+        </parse>
+      </source>
+
+      <source>
+        @type tail
+        @id in_tail_docker_logs
+        path /var/log/docker
+        pos_file /var/log/fluentd-docker.log.pos
+        tag "docker"
+        read_from_head true
+        <parse>
+          @type "regexp"
+          expression /^time="(?<time>[^)]*)" level=(?<severity>[^ ]*) msg="(?<message>[^"]*)"( err="(?<error>[^"]*)")?( statusCode=($<status_code>\d+))?/
+        </parse>
+      </source>
+
+      <filter kubernetes.**>
+        @type kubernetes_metadata
+        @id filter_kube_metadata
+        kubernetes_url "#{ENV['FLUENT_FILTER_KUBERNETES_URL'] || 'https://' + ENV.fetch('KUBERNETES_SERVICE_HOST') + ':' + ENV.fetch('KUBERNETES_SERVICE_PORT') + '/api'}"
+        verify_ssl "#{ENV['KUBERNETES_VERIFY_SSL'] || true}"
+        ca_file "#{ENV['KUBERNETES_CA_FILE']}"
+        skip_labels "#{ENV['FLUENT_KUBERNETES_METADATA_SKIP_LABELS'] || 'false'}"
+        skip_container_metadata "#{ENV['FLUENT_KUBERNETES_METADATA_SKIP_CONTAINER_METADATA'] || 'false'}"
+        skip_master_url "#{ENV['FLUENT_KUBERNETES_METADATA_SKIP_MASTER_URL'] || 'false'}"
+        skip_namespace_metadata "#{ENV['FLUENT_KUBERNETES_METADATA_SKIP_NAMESPACE_METADATA'] || 'false'}"
+        watch "#{ENV['FLUENT_KUBERNETES_WATCH'] || 'false'}"
+        de_dot false
+        annotation_match [ ".*" ]
+      </filter>
+
+      <match **>
+        @type cloudwatch_logs
+        @id out_cloudwatch_logs
+        region "#{ENV.fetch('FLUENT_CLOUDWATCH_REGION')}"
+        log_group_name "#{ENV.fetch('FLUENT_CLOUDWATCH_LOG_GROUP_NAME')}"
+        log_stream_name_key stream_name
+        remove_log_stream_name_key true
+        auto_create_stream true
+        <buffer>
+          flush_interval 5
+          chunk_limit_size 2m
+          queued_chunks_limit_size 32
+          retry_forever true
+        </buffer>
+      </match> 

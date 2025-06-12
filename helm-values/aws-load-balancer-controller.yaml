@@ -1,0 +1,27 @@
+clusterName: eks-observability-cluster
+serviceAccount:
+  create: false
+  name: aws-load-balancer-controller
+
+region: us-west-2
+
+vpcId: # Will be set via command line
+
+# Resource limits
+resources:
+  limits:
+    cpu: 200m
+    memory: 500Mi
+  requests:
+    cpu: 100m
+    memory: 200Mi
+
+# Enable logging
+logLevel: info
+
+# Enable metrics
+enableServiceMutatorWebhook: true
+enableEndpointSlices: true
+
+# Configure webhook
+webhookBindPort: 9443 

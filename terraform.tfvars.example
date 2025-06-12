@@ -1,0 +1,27 @@
+# AWS Configuration
+aws_region = "us-west-2"
+
+# EKS Cluster Configuration
+cluster_name       = "eks-observability-cluster"
+kubernetes_version = "1.28"
+environment        = "production"
+
+# Node Group Configuration
+node_instance_types = ["t3.medium"]
+desired_capacity    = 2
+max_capacity        = 4
+min_capacity        = 1
+
+# Example for different regions:
+# aws_region = "us-east-1"
+
+# Example for development environment:
+# cluster_name    = "eks-dev-cluster"
+# environment     = "development"
+# desired_capacity = 1
+# max_capacity     = 2
+
+# Example for production with larger nodes:
+# node_instance_types = ["t3.large"]
+# desired_capacity    = 3
+# max_capacity        = 6 
